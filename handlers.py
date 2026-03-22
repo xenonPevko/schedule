@@ -1,0 +1,514 @@
+import logging
+from datetime import datetime, timedelta
+from aiogram import Router, F
+from aiogram.filters import Command, CommandStart, StateFilter
+from aiogram.types import Message, CallbackQuery
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import ReplyKeyboardMarkup
+from database import is_admin, add_lesson, get_all_groups, get_lessons_by_group, delete_lesson
+
+from database import (
+    add_student, get_student, get_schedule, 
+    add_homework, get_homework, mark_homework_done,
+    is_admin
+)
+from keyboards import get_main_keyboard, get_days_keyboard, get_homework_inline_keyboard
+
+router = Router()
+logger = logging.getLogger(__name__)
+
+# Состояния для FSM (машина состояний)
+class AddHomeworkStates(StatesGroup):
+    waiting_for_subject = State()
+    waiting_for_task = State()
+    waiting_for_date = State()
+
+# Состояния для добавления расписания
+class AddLessonStates(StatesGroup):
+    waiting_for_group = State()
+    waiting_for_day = State()
+    waiting_for_lesson_number = State()
+    waiting_for_subject = State()
+    waiting_for_room = State()
+
+# Дни недели для отображения
+DAYS_RU = {
+    "ПН": "понедельник",
+    "ВТ": "вторник",
+    "СР": "среда",
+    "ЧТ": "четверг",
+    "ПТ": "пятница",
+    "СБ": "суббота",
+    "ВС": "воскресенье"
+}
+
+DAYS_EN = {
+    "понедельник": "ПН",
+    "вторник": "ВТ",
+    "среда": "СР",
+    "четверг": "ЧТ",
+    "пятница": "ПТ",
+    "суббота": "СБ",
+    "воскресенье": "ВС"
+}
+
+def get_today_name():
+    """Возвращает название сегодняшнего дня на русском"""
+    days = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
+    return days[datetime.now().weekday()]
+
+def get_tomorrow_name():
+    """Возвращает название завтрашнего дня на русском"""
+    days = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
+    return days[(datetime.now().weekday() + 1) % 7]
+
+@router.message(CommandStart())
+async def cmd_start(message: Message):
+    """Обработчик команды /start"""
+    user = message.from_user
+    student = get_student(user.id)
+    
+    if not student:
+        add_student(user.id, user.first_name, user.last_name)
+    
+    await message.answer(
+        f"👋 Привет, {user.first_name}!\n\n"
+        "Я бот-помощник студента. Вот что я умею:\n\n"
+        "📅 /schedule — расписание на сегодня\n"
+        "📆 /tomorrow — расписание на завтра\n"
+        "📚 /homework — мои домашние задания\n"
+        "➕ /add_hw — добавить домашнее задание\n\n"
+        "Или используй кнопки внизу 👇",
+        reply_markup=get_main_keyboard()
+    )
+
+@router.message(Command("schedule"))
+@router.message(F.text == "📅 Расписание на сегодня")
+async def cmd_schedule_today(message: Message):
+    """Показать расписание на сегодня"""
+    student = get_student(message.from_user.id)
+    
+    if not student or not student["group_name"]:
+        await message.answer(
+            "⚠️ Сначала укажи свою группу.\n"
+            "Напиши /setgroup и название группы (например, ПИ-31)"
+        )
+        return
+    
+    day_name = get_today_name()
+    schedule = get_schedule(student["group_name"], day_name)
+    
+    if not schedule:
+        await message.answer(f"📅 На {day_name} пар нет. Отдыхай! 🎉")
+        return
+    
+    text = f"📅 Расписание на {day_name}:\n\n"
+    for lesson in schedule:
+        text += f"{lesson['lesson_number']} пара ({lesson['start_time']}-{lesson['end_time']})\n"
+        text += f"📖 {lesson['subject']}\n"
+        text += f"🏛️ ауд. {lesson['room']}\n\n"
+    
+    await message.answer(text)
+
+@router.message(Command("tomorrow"))
+@router.message(F.text == "📆 Расписание на завтра")
+async def cmd_schedule_tomorrow(message: Message):
+    """Показать расписание на завтра"""
+    student = get_student(message.from_user.id)
+    
+    if not student or not student["group_name"]:
+        await message.answer(
+            "⚠️ Сначала укажи свою группу.\n"
+            "Напиши /setgroup и название группы (например, ПИ-31)"
+        )
+        return
+    
+    day_name = get_tomorrow_name()
+    schedule = get_schedule(student["group_name"], day_name)
+    
+    if not schedule:
+        await message.answer(f"📆 На {day_name} пар нет. Отдыхай! 🎉")
+        return
+    
+    text = f"📆 Расписание на {day_name}:\n\n"
+    for lesson in schedule:
+        text += f"{lesson['lesson_number']} пара ({lesson['start_time']}-{lesson['end_time']})\n"
+        text += f"📖 {lesson['subject']}\n"
+        text += f"🏛️ ауд. {lesson['room']}\n\n"
+    
+    await message.answer(text)
+
+@router.message(Command("homework"))
+@router.message(F.text == "📚 Мои домашние задания")
+async def cmd_homework(message: Message):
+    """Показать домашние задания"""
+    student = get_student(message.from_user.id)
+    
+    if not student:
+        await message.answer("Сначала напиши /start для регистрации")
+        return
+    
+    homework_list = get_homework(student["user_id"])
+    
+    if not homework_list:
+        await message.answer("📚 У тебя пока нет домашних заданий.\n\nДобавь первое через /add_hw!")
+        return
+    
+    text = "📚 Твои домашние задания:\n\n"
+    for hw in homework_list:
+        status = "✅" if hw["is_done"] else "⏳"
+        text += f"{status} {hw['subject']}\n"
+        text += f"📝 {hw['task_text']}\n"
+        text += f"📅 Срок: {hw['due_date']}\n"
+        if not hw["is_done"]:
+            text += f"🔖 /done_{hw['id']} — отметить выполненным\n"
+        text += "\n"
+    
+    await message.answer(text)
+
+@router.message(Command("add_hw"))
+@router.message(F.text == "➕ Добавить домашнее задание")
+async def cmd_add_hw_start(message: Message, state: FSMContext):
+    """Начать добавление домашнего задания"""
+    student = get_student(message.from_user.id)
+    
+    if not student:
+        await message.answer("Сначала напиши /start для регистрации")
+        return
+    
+    await message.answer(
+        "➕ Давай добавим домашнее задание!\n\n"
+        "Сначала напиши **название предмета** (например: Математика, Базы данных)",
+        parse_mode="Markdown"
+    )
+    await state.set_state(AddHomeworkStates.waiting_for_subject)
+
+@router.message(AddHomeworkStates.waiting_for_subject)
+async def add_hw_subject(message: Message, state: FSMContext):
+    """Сохраняем предмет и просим задание"""
+    await state.update_data(subject=message.text)
+    await message.answer(
+        "📝 Теперь напиши **описание задания**\n"
+        "(что нужно сделать, номер задачи, страницы и т.д.)"
+    )
+    await state.set_state(AddHomeworkStates.waiting_for_task)
+
+@router.message(AddHomeworkStates.waiting_for_task)
+async def add_hw_task(message: Message, state: FSMContext):
+    """Сохраняем задание и просим дату"""
+    await state.update_data(task=message.text)
+    await message.answer(
+        "📅 Теперь напиши **дату сдачи** в формате: ДД.ММ.ГГГГ\n\n"
+        "Например: 25.05.2026"
+    )
+    await state.set_state(AddHomeworkStates.waiting_for_date)
+
+@router.message(AddHomeworkStates.waiting_for_date)
+async def add_hw_date(message: Message, state: FSMContext):
+    """Сохраняем дату и создаём задание"""
+    due_date = message.text
+    
+    # Простая проверка формата даты
+    try:
+        datetime.strptime(due_date, "%d.%m.%Y")
+    except ValueError:
+        await message.answer(
+            "❌ Неправильный формат даты!\n"
+            "Напиши в формате: ДД.ММ.ГГГГ (например, 25.05.2026)"
+        )
+        return
+    
+    data = await state.get_data()
+    student = get_student(message.from_user.id)
+    
+    add_homework(
+        user_id=student["user_id"],
+        subject=data["subject"],
+        task_text=data["task"],
+        due_date=due_date
+    )
+    
+    await message.answer(
+        f"✅ Домашнее задание добавлено!\n\n"
+        f"📖 {data['subject']}\n"
+        f"📝 {data['task']}\n"
+        f"📅 Срок: {due_date}\n\n"
+        "Я напомню о нём за день до срока!"
+    )
+    
+    await state.clear()
+
+@router.message(Command("setgroup"))
+async def cmd_set_group(message: Message):
+    """Установить группу (пока простая версия)"""
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.answer(
+            "⚠️ Напиши: /setgroup НАЗВАНИЕ_ГРУППЫ\n\n"
+            "Например: /setgroup ПИ-31"
+        )
+        return
+    
+    group_name = parts[1].upper()
+    student = get_student(message.from_user.id)
+    
+    if student:
+        from database import get_db_connection
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'UPDATE students SET group_name = ? WHERE user_id = ?',
+                (group_name, student["user_id"])
+            )
+            conn.commit()
+    
+    await message.answer(f"✅ Группа установлена: {group_name}")
+
+# Обработка отметки о выполнении через инлайн-кнопки
+@router.callback_query(F.data.startswith("done_"))
+async def callback_mark_done(callback: CallbackQuery):
+    """Отмечает задание выполненным"""
+    hw_id = int(callback.data.split("_")[1])
+    mark_homework_done(hw_id)
+    
+    await callback.answer("✅ Задание отмечено как выполненное!")
+    await callback.message.edit_text(
+        callback.message.text + "\n\n✅ Выполнено!"
+    )
+
+# Команда /help
+@router.message(Command("help"))
+async def cmd_help(message: Message):
+    """Помощь"""
+    help_text = """
+📖 **Справка по командам:**
+
+/start — начать работу
+/schedule — расписание на сегодня
+/tomorrow — расписание на завтра
+/homework — мои домашние задания
+/add_hw — добавить домашнее задание
+/setgroup — установить группу
+
+📌 **Примеры:**
+/setgroup ПИ-31
+/add_hw
+
+Также можно пользоваться кнопками внизу 👇
+"""
+    await message.answer(help_text, parse_mode="Markdown")
+
+# Админ-команды (только для администраторов)
+@router.message(Command("add_admin"))
+async def cmd_add_admin(message: Message):
+    """Добавить администратора (только для админов)"""
+    if not is_admin(message.from_user.id):
+        await message.answer("⛔ У вас нет прав на эту команду")
+        return
+    
+    parts = message.text.split()
+    if len(parts) < 2:
+        await message.answer("⚠️ Напиши: /add_admin TELEGRAM_ID")
+        return
+    
+    try:
+        admin_id = int(parts[1])
+        from database import add_admin
+        add_admin(admin_id)
+        await message.answer(f"✅ Пользователь {admin_id} добавлен в администраторы")
+    except ValueError:
+        await message.answer("❌ Неверный формат ID")
+
+@router.message(Command("add_lesson"))
+async def cmd_add_lesson(message: Message):
+    """Добавить занятие в расписание (только для админов)"""
+    if not is_admin(message.from_user.id):
+        await message.answer("⛔ У вас нет прав на эту команду")
+        return
+    
+    await message.answer(
+        "🚧 Функция добавления расписания в разработке.\n"
+        "Пока что расписание можно добавить напрямую в базу данных."
+    )
+
+# ==================== АДМИН-КОМАНДЫ ДЛЯ РАСПИСАНИЯ ====================
+
+@router.message(Command("add_lesson"))
+async def cmd_add_lesson_start(message: Message, state: FSMContext):
+    """Начать добавление занятия (только для админов)"""
+    if not is_admin(message.from_user.id):
+        await message.answer("⛔ Эта команда доступна только старосте группы.")
+        return
+    
+    await message.answer(
+        "📚 **Добавление занятия в расписание**\n\n"
+        "Введи название группы (например: ПИ-31)",
+        parse_mode="Markdown"
+    )
+    await state.set_state(AddLessonStates.waiting_for_group)
+
+@router.message(AddLessonStates.waiting_for_group)
+async def add_lesson_group(message: Message, state: FSMContext):
+    """Сохраняем группу, спрашиваем день"""
+    group_name = message.text.upper()
+    await state.update_data(group_name=group_name)
+    
+    # Клавиатура с днями недели
+    days_kb = [
+        ["понедельник", "вторник", "среда"],
+        ["четверг", "пятница", "суббота"],
+        ["воскресенье"]
+    ]
+    kb = ReplyKeyboardMarkup(keyboard=days_kb, resize_keyboard=True)
+    
+    await message.answer(
+        f"Группа: {group_name}\n\n"
+        "Теперь выбери **день недели**:",
+        reply_markup=kb,
+        parse_mode="Markdown"
+    )
+    await state.set_state(AddLessonStates.waiting_for_day)
+
+@router.message(AddLessonStates.waiting_for_day)
+async def add_lesson_day(message: Message, state: FSMContext):
+    """Сохраняем день, спрашиваем номер пары"""
+    day = message.text.lower()
+    valid_days = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
+    
+    if day not in valid_days:
+        await message.answer("❌ Выбери день из списка кнопками")
+        return
+    
+    await state.update_data(day=day)
+    
+    # Клавиатура с номерами пар
+    numbers_kb = [[str(i)] for i in range(1, 7)]
+    numbers_kb.append(["◀️ Отмена"])
+    kb = ReplyKeyboardMarkup(keyboard=numbers_kb, resize_keyboard=True)
+    
+    await message.answer(
+        f"День: {day}\n\n"
+        "Введи **номер пары** (1-6):",
+        reply_markup=kb,
+        parse_mode="Markdown"
+    )
+    await state.set_state(AddLessonStates.waiting_for_lesson_number)
+
+@router.message(AddLessonStates.waiting_for_lesson_number)
+async def add_lesson_number(message: Message, state: FSMContext):
+    """Сохраняем номер пары, спрашиваем предмет"""
+    if message.text == "◀️ Отмена":
+        await state.clear()
+        await message.answer("❌ Добавление отменено", reply_markup=get_main_keyboard())
+        return
+    
+    try:
+        lesson_number = int(message.text)
+        if lesson_number < 1 or lesson_number > 6:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Введи число от 1 до 6")
+        return
+    
+    await state.update_data(lesson_number=lesson_number)
+    await message.answer(
+        f"Номер пары: {lesson_number}\n\n"
+        "Теперь введи **название предмета**:",
+        parse_mode="Markdown"
+    )
+    await state.set_state(AddLessonStates.waiting_for_subject)
+
+@router.message(AddLessonStates.waiting_for_subject)
+async def add_lesson_subject(message: Message, state: FSMContext):
+    """Сохраняем предмет, спрашиваем аудиторию"""
+    await state.update_data(subject=message.text)
+    await message.answer(
+        f"Предмет: {message.text}\n\n"
+        "Теперь введи **номер аудитории**:",
+        parse_mode="Markdown"
+    )
+    await state.set_state(AddLessonStates.waiting_for_room)
+
+@router.message(AddLessonStates.waiting_for_room)
+async def add_lesson_room(message: Message, state: FSMContext):
+    """Сохраняем аудиторию и создаём занятие"""
+    room = message.text
+    data = await state.get_data()
+    
+    from database import add_lesson
+    add_lesson(
+        group_name=data["group_name"],
+        day_of_week=data["day"],
+        lesson_number=data["lesson_number"],
+        subject=data["subject"],
+        room=room
+    )
+    
+    await message.answer(
+        f"✅ **Занятие добавлено!**\n\n"
+        f"Группа: {data['group_name']}\n"
+        f"День: {data['day']}\n"
+        f"Пара: {data['lesson_number']}\n"
+        f"Предмет: {data['subject']}\n"
+        f"Аудитория: {room}",
+        reply_markup=get_main_keyboard(),
+        parse_mode="Markdown"
+    )
+    await state.clear()
+
+# ==================== ПРОСМОТР И УДАЛЕНИЕ РАСПИСАНИЯ ====================
+
+@router.message(Command("view_schedule"))
+async def cmd_view_schedule(message: Message):
+    """Просмотр расписания группы (только для админов)"""
+    if not is_admin(message.from_user.id):
+        await message.answer("⛔ Эта команда доступна только старосте группы.")
+        return
+    
+    from database import get_all_groups, get_lessons_by_group
+    
+    groups = get_all_groups()
+    if not groups:
+        await message.answer("📭 В базе пока нет расписания ни для одной группы.")
+        return
+    
+    # Просто показываем первую группу
+    group = groups[0]
+    lessons = get_lessons_by_group(group)
+    
+    if not lessons:
+        await message.answer(f"📭 Для группы {group} расписание пустое.")
+        return
+    
+    text = f"📚 **Расписание группы {group}**\n\n"
+    current_day = ""
+    for lesson in lessons:
+        if lesson["day_of_week"] != current_day:
+            current_day = lesson["day_of_week"]
+            text += f"\n*{current_day.capitalize()}:*\n"
+        text += f"{lesson['lesson_number']} пара ({lesson['start_time']}-{lesson['end_time']}) — {lesson['subject']} (ауд. {lesson['room']}) — /del_{lesson['id']}\n"
+    
+    text += "\n_Для удаления нажми на команду /del_ID_"
+    await message.answer(text, parse_mode="Markdown")
+
+@router.message(lambda msg: msg.text and msg.text.startswith("/del_"))
+async def cmd_delete_lesson(message: Message):
+    """Удаление занятия по ID (только для админов)"""
+    if not is_admin(message.from_user.id):
+        await message.answer("⛔ Эта команда доступна только старосте группы.")
+        return
+    
+    try:
+        lesson_id = int(message.text.split("_")[1])
+    except (IndexError, ValueError):
+        await message.answer("❌ Неверный формат. Используй команду из списка.")
+        return
+    
+    from database import delete_lesson
+    deleted = delete_lesson(lesson_id)
+    
+    if deleted:
+        await message.answer(f"✅ Занятие с ID {lesson_id} удалено.")
+    else:
+        await message.answer(f"❌ Занятие с ID {lesson_id} не найдено.")
