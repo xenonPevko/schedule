@@ -70,7 +70,7 @@ async def cmd_start(message: Message):
     student = get_student(user.id)
     
     if not student:
-        add_student(user.id, user.first_name, user.last_name)
+        add_student(user.id, user.first_name)
     
     await message.answer(
         f"👋 Привет, {user.first_name}!\n\n"

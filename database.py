@@ -23,7 +23,6 @@ def init_db():
                 telegram_id INTEGER UNIQUE,
                 group_name TEXT,
                 first_name TEXT,
-                last_name TEXT,
                 registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
