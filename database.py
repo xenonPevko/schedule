@@ -95,14 +95,13 @@ def init_db():
         conn.commit()
         logger.info("База данных инициализирована")
 
-def add_student(telegram_id, first_name, last_name=None, group_name=None):
-    """Добавляет или обновляет студента"""
+def add_student(telegram_id, first_name, group_name=None):
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT OR REPLACE INTO students (telegram_id, first_name, last_name, group_name)
-            VALUES (?, ?, ?, ?)
-        ''', (telegram_id, first_name, last_name, group_name))
+            INSERT OR REPLACE INTO students (telegram_id, first_name, group_name)
+            VALUES (?, ?, ?)
+        ''', (telegram_id, first_name, group_name))
         conn.commit()
         return cursor.lastrowid
 
