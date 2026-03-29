@@ -295,6 +295,29 @@ async def cmd_help(message: Message):
 """
     await message.answer(help_text, parse_mode="Markdown")
 
+@router.message(Command("info"))
+async def cmd_info(message: Message):
+    text = """
+📖 **СПРАВКА (актуальная версия)**
+
+**Для всех студентов:**
+/start — выбрать группу
+/schedule — расписание на сегодня
+/tomorrow — расписание на завтра
+/homework — мои домашние задания
+/add_hw — добавить домашнее задание
+/check_reminders — проверить задания на завтра
+
+**Для старост:**
+/become_admin КОД — стать администратором 
+/add_lesson — добавить занятие в расписание
+/view_schedule — посмотреть расписание группы
+/is_admin — проверить статус
+
+Также можно пользоваться кнопками внизу 👇
+"""
+    await message.answer(text, parse_mode="Markdown")
+
 
 @router.message(Command("check_reminders"))
 async def cmd_check_reminders(message: Message):
