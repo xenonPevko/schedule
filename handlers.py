@@ -275,7 +275,7 @@ async def cmd_set_group(message: Message):
 async def cmd_help(message: Message):
     """Помощь"""
     help_text = """
-📖 **Справка по командам:**
+📖 Справка по командам:
 
 /start — начать работу (выбрать группу)
 /schedule — расписание на сегодня
@@ -285,7 +285,7 @@ async def cmd_help(message: Message):
 /check_reminders — проверить задания на завтра
 /setgroup — установить группу
 
-📌 **Для старост:**
+📌 Для старост:
 /become_admin КОД — стать администратором (код: STAROSTA2026)
 /add_lesson — добавить занятие в расписание
 /view_schedule — посмотреть расписание группы
