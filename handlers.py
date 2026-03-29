@@ -536,27 +536,27 @@ async def cmd_view_schedule(message: Message):
         await message.answer("⛔ Эта команда доступна только старосте группы.")
         return
     
-    groups = get_all_groups()
-    if not groups:
-        await message.answer("📭 В базе пока нет расписания ни для одной группы.")
+    student = get_student(message.from_user.id)
+    if not student or not student["group_name"]:
+        await message.answer("⚠️ Сначала выбери свою группу через /start")
         return
     
-    group = groups[0]
-    lessons = get_lessons_by_group(group)
+    group_name = student["group_name"]
+    lessons = get_lessons_by_group(group_name)
     
     if not lessons:
-        await message.answer(f"📭 Для группы {group} расписание пустое.")
+        await message.answer(f"📭 Для группы {group_name} расписание пустое.")
         return
     
-    text = f"📚 **Расписание группы {group}**\n\n"
+    text = f"📚 *Расписание группы {group_name}*\n\n"
     current_day = ""
     for lesson in lessons:
         if lesson["day_of_week"] != current_day:
             current_day = lesson["day_of_week"]
-            text += f"\n*{current_day.capitalize()}:*\n"
-        text += f"{lesson['lesson_number']} пара ({lesson['start_time']}-{lesson['end_time']}) — {lesson['subject']} (ауд. {lesson['room']}) — /del_{lesson['id']}\n"
+            text += f"\n*{current_day.capitalize()}*\n"
+        text += f"{lesson['lesson_number']} пара ({lesson['start_time']}-{lesson['end_time']}) — {lesson['subject']} (ауд. {lesson['room']})\n"
+        text += f"➡️ Для удаления: `/del_{lesson['id']}`\n"
     
-    text += "\n_Для удаления нажми на команду /del_ID_"
     await message.answer(text, parse_mode="Markdown")
 
 
@@ -610,12 +610,12 @@ async def cmd_delete_lesson_list(message: Message):
         await message.answer(f"📭 Для группы {group_name} расписание пустое.")
         return
     
-    text = f"📚 **Расписание группы {group_name}**\n\n"
+    text = f"📚 *Расписание группы {group_name}*\n\n"
     current_day = ""
     for lesson in lessons:
         if lesson["day_of_week"] != current_day:
             current_day = lesson["day_of_week"]
-            text += f"\n*{current_day.capitalize()}:*\n"
+            text += f"\n*{current_day.capitalize()}*\n"
         text += f"{lesson['lesson_number']} пара ({lesson['start_time']}-{lesson['end_time']}) — {lesson['subject']} (ауд. {lesson['room']})\n"
         text += f"➡️ Для удаления: `/del_{lesson['id']}`\n"
     
