@@ -10,7 +10,7 @@ from database import (
     add_student, get_student, get_schedule, 
     add_homework, get_homework, get_homework_by_date, mark_homework_done,
     is_admin, add_admin, add_lesson, get_all_groups, get_lessons_by_group, delete_lesson,
-    get_lesson_by_id
+    get_lesson_by_id, get_db_connection
 )
 from keyboards import get_main_keyboard, get_homework_inline_keyboard, get_groups_keyboard
 from bot import get_izhevsk_now
