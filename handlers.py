@@ -380,6 +380,7 @@ async def cmd_become_admin(message: Message):
 
 @router.message(Command("addlesson"))
 async def cmd_add_lesson_start(message: Message, state: FSMContext):
+    print("DEBUG: ВЫЗВАНА ФУНКЦИЯ cmd_add_lesson_start") 
     """Начать добавление занятия (только для админов)"""
     if not is_admin(message.from_user.id):
         await message.answer("⛔ Эта команда доступна только старосте группы.")
