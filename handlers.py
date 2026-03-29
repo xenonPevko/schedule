@@ -458,7 +458,7 @@ async def add_lesson_day(message: Message, state: FSMContext):
     
     await message.answer(
         f"День: {day}\n\n"
-        "Введи **номер пары** (1-6):",
+        "Введи **номер пары** (1-7):",
         reply_markup=kb,
         parse_mode="Markdown"
     )
@@ -475,10 +475,10 @@ async def add_lesson_number(message: Message, state: FSMContext):
     
     try:
         lesson_number = int(message.text)
-        if lesson_number < 1 or lesson_number > 6:
+        if lesson_number < 1 or lesson_number > 7:
             raise ValueError
     except ValueError:
-        await message.answer("❌ Введи число от 1 до 6")
+        await message.answer("❌ Введи число от 1 до 7")
         return
     
     await state.update_data(lesson_number=lesson_number)
