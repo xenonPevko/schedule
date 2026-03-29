@@ -23,3 +23,9 @@ def get_homework_inline_keyboard(hw_id):
         [InlineKeyboardButton(text="✅ Отметить как выполненное", callback_data=f"done_{hw_id}")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=kb)
+
+def get_groups_keyboard():
+    groups = ["ПИ-д", "ПИ-э", "ПИ-ю", "ИВТ", "ИС", "ИТ"]
+    kb = [[KeyboardButton(text=group)] for group in groups]
+    kb.append([KeyboardButton(text="◀️ Назад")])
+    return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)

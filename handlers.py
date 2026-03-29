@@ -6,7 +6,9 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup
-from database import is_admin, add_lesson, get_all_groups, get_lessons_by_group, delete_lesson
+from database import is_admin, add_admin, add_lesson, get_all_groups, get_lessons_by_group, delete_lesson, get_db_connection
+import pytz
+from bot import get_izhevsk_now
 
 from database import (
     add_student, get_student, get_schedule, 
@@ -65,22 +67,21 @@ def get_tomorrow_name():
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
-    """Обработчик команды /start"""
     user = message.from_user
     student = get_student(user.id)
     
     if not student:
         add_student(user.id, user.first_name)
     
+    # Импортируем клавиатуру с группами
+    from keyboards import get_groups_keyboard
+    
     await message.answer(
         f"👋 Привет, {user.first_name}!\n\n"
-        "Я бот-помощник студента. Вот что я умею:\n\n"
-        "📅 /schedule — расписание на сегодня\n"
-        "📆 /tomorrow — расписание на завтра\n"
-        "📚 /homework — мои домашние задания\n"
-        "➕ /add_hw — добавить домашнее задание\n\n"
-        "Или используй кнопки внизу 👇",
-        reply_markup=get_main_keyboard()
+        "Я бот-помощник студента.\n\n"
+        "**Сначала выбери свою группу:**",
+        reply_markup=get_groups_keyboard(),
+        parse_mode="Markdown"
     )
 
 @router.message(Command("schedule"))
@@ -211,7 +212,12 @@ async def add_hw_date(message: Message, state: FSMContext):
     
     # Простая проверка формата даты
     try:
-        datetime.strptime(due_date, "%d.%m.%Y")
+        due_date_obj = datetime.strptime(due_date, "%d.%m.%Y")
+        today = get_izhevsk_now().date()
+    
+        if due_date_obj < today:
+            await message.answer("❌ Нельзя добавить домашнее задание на прошедшую дату!")
+            return
     except ValueError:
         await message.answer(
             "❌ Неправильный формат даты!\n"
@@ -268,6 +274,7 @@ async def cmd_set_group(message: Message):
 # Обработка отметки о выполнении через инлайн-кнопки
 @router.callback_query(F.data.startswith("done_"))
 async def callback_mark_done(callback: CallbackQuery):
+    print(f"Получен callback: {callback.data}")  # Временная отладка
     """Отмечает задание выполненным"""
     hw_id = int(callback.data.split("_")[1])
     mark_homework_done(hw_id)
@@ -319,6 +326,21 @@ async def cmd_add_admin(message: Message):
         await message.answer(f"✅ Пользователь {admin_id} добавлен в администраторы")
     except ValueError:
         await message.answer("❌ Неверный формат ID")
+
+ADMIN_SECRET_CODE = "STAROSTA2026"  # поменяй на свой
+
+@router.message(Command("become_admin"))
+async def become_admin(message: Message):
+    parts = message.text.split()
+    if len(parts) < 2:
+        await message.answer("Введи код: /become_admin КОД")
+        return
+    if parts[1] == ADMIN_SECRET_CODE:
+        from database import add_admin
+        add_admin(message.from_user.id)
+        await message.answer("✅ Ты теперь староста группы!")
+    else:
+        await message.answer("❌ Неверный код")
 
 @router.message(Command("add_lesson"))
 async def cmd_add_lesson(message: Message):
@@ -512,3 +534,31 @@ async def cmd_delete_lesson(message: Message):
         await message.answer(f"✅ Занятие с ID {lesson_id} удалено.")
     else:
         await message.answer(f"❌ Занятие с ID {lesson_id} не найдено.")
+
+@router.message(Command("check_reminders"))
+async def cmd_check_reminders(message: Message):
+    user_id = message.from_user.id
+    tomorrow = (get_izhevsk_now() + timedelta(days=1)).date()
+    
+    homework_list = get_homework_by_date(user_id, tomorrow.strftime("%d.%m.%Y"))
+    
+    if not homework_list:
+        await message.answer("На завтра нет домашних заданий 📭")
+        return
+    
+    text = "📢 **Напоминание на завтра:**\n\n"
+    for hw in homework_list:
+        text += f"📖 {hw['subject']}\n📝 {hw['task_text']}\n\n"
+    await message.answer(text)
+
+@router.message(F.text.in_(["ПИ-д", "ПИ-э", "ПИ-ю", "ИВТ", "ИС", "ИТ"]))
+async def select_group(message: Message):
+    group = message.text
+    user_id = message.from_user.id
+    
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('UPDATE students SET group_name = ? WHERE telegram_id = ?', (group, user_id))
+        conn.commit()
+    
+    await message.answer(f"✅ Группа {group} сохранена!", reply_markup=get_main_keyboard())

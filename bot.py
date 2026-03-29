@@ -6,6 +6,20 @@ from config import BOT_TOKEN
 from database import init_db
 import handlers
 from keyboards import get_main_keyboard
+import os
+import pytz
+from datetime import datetime
+
+os.environ['TZ'] = 'Europe/Samara'  # Ижевск — UTC+4
+try:
+    import time
+    time.tzset()
+except AttributeError:
+    pass  # для Windows
+
+def get_izhevsk_now():
+    tz = pytz.timezone('Europe/Samara')
+    return datetime.now(tz)
 
 # Настройка логирования
 logging.basicConfig(

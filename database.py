@@ -223,3 +223,14 @@ def get_lessons_by_group(group_name):
                 s.lesson_number
         ''', (group_name,))
         return cursor.fetchall()
+    
+def get_homework_by_date(user_id, due_date):
+    """Получает домашние задания на конкретную дату"""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT * FROM homework 
+            WHERE user_id = ? AND due_date = ?
+            ORDER BY due_date
+        ''', (user_id, due_date))
+        return cursor.fetchall()
