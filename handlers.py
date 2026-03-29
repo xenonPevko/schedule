@@ -136,7 +136,7 @@ async def cmd_homework(message: Message):
     homework_list = get_homework(student["user_id"])
     
     if not homework_list:
-        await message.answer("📚 У тебя пока нет домашних заданий.\n\nДобавь первое через /add_hw!")
+        await message.answer("📚 У тебя пока нет домашних заданий.\n\nДобавь первое через /addhw!")
         return
     
     for hw in homework_list:
@@ -155,7 +155,7 @@ async def cmd_homework(message: Message):
             await message.answer(text, parse_mode="Markdown")
 
 
-@router.message(Command("add_hw"))
+@router.message(Command("addhw"))
 @router.message(F.text == "➕ Добавить домашнее задание")
 async def cmd_add_hw_start(message: Message, state: FSMContext):
     """Начать добавление домашнего задания"""
@@ -281,45 +281,21 @@ async def cmd_help(message: Message):
 /schedule — расписание на сегодня
 /tomorrow — расписание на завтра
 /homework — мои домашние задания
-/add_hw — добавить домашнее задание
-/check_reminders — проверить задания на завтра
+/addhw — добавить домашнее задание
+/checkreminders — проверить задания на завтра
 /setgroup — установить группу
 
 📌 Для старост:
-/become_admin КОД — стать администратором 
-/add_lesson — добавить занятие в расписание
-/view_schedule — посмотреть расписание группы
-/is_admin — проверить статус администратора
+/becomeadmin КОД — стать администратором 
+/addlesson — добавить занятие в расписание
+/viewschedule — посмотреть расписание группы
+/isadmin — проверить статус администратора
 
 Также можно пользоваться кнопками внизу 👇
 """
     await message.answer(help_text, parse_mode="Markdown")
 
-@router.message(Command("info"))
-async def cmd_info(message: Message):
-    text = """
-📖 **СПРАВКА (актуальная версия)**
-
-**Для всех студентов:**
-/start — выбрать группу
-/schedule — расписание на сегодня
-/tomorrow — расписание на завтра
-/homework — мои домашние задания
-/add_hw — добавить домашнее задание
-/check_reminders — проверить задания на завтра
-
-**Для старост:**
-/become_admin КОД — стать администратором 
-/add_lesson — добавить занятие в расписание
-/view_schedule — посмотреть расписание группы
-/is_admin — проверить статус
-
-Также можно пользоваться кнопками внизу 👇
-"""
-    await message.answer(text, parse_mode="Markdown")
-
-
-@router.message(Command("check_reminders"))
+@router.message(Command("checkreminders"))
 async def cmd_check_reminders(message: Message):
     """Проверяет домашние задания на завтра (имитация напоминания)"""
     user_id = message.from_user.id
@@ -337,7 +313,7 @@ async def cmd_check_reminders(message: Message):
     await message.answer(text, parse_mode="Markdown")
 
 
-@router.message(Command("is_admin"))
+@router.message(Command("isadmin"))
 async def cmd_is_admin(message: Message):
     """Проверяет, является ли пользователь администратором"""
     if is_admin(message.from_user.id):
@@ -379,12 +355,12 @@ async def callback_mark_done(callback: CallbackQuery):
 
 # ==================== КОМАНДЫ ДЛЯ АДМИНИСТРАТОРОВ ====================
 
-@router.message(Command("become_admin"))
+@router.message(Command("becomeadmin"))
 async def cmd_become_admin(message: Message):
     """Стать администратором по секретному коду"""
     parts = message.text.split()
     if len(parts) < 2:
-        await message.answer("❌ Введи код: /become_admin КОД")
+        await message.answer("❌ Введи код: /becomeadmin КОД")
         return
     
     code = parts[1]
@@ -397,7 +373,7 @@ async def cmd_become_admin(message: Message):
         await message.answer("❌ Неверный код")
 
 
-@router.message(Command("add_lesson"))
+@router.message(Command("addlesson"))
 async def cmd_add_lesson_start(message: Message, state: FSMContext):
     """Начать добавление занятия (только для админов)"""
     if not is_admin(message.from_user.id):
@@ -523,7 +499,7 @@ async def add_lesson_room(message: Message, state: FSMContext):
     await state.clear()
 
 
-@router.message(Command("view_schedule"))
+@router.message(Command("viewschedule"))
 async def cmd_view_schedule(message: Message):
     """Просмотр расписания группы (только для админов)"""
     if not is_admin(message.from_user.id):
