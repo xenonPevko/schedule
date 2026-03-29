@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timedelta
 from aiogram import Router, F
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message, CallbackQuery, ReplyKeyboardMarkup
+from aiogram.types import Message, CallbackQuery, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
@@ -357,7 +357,6 @@ async def callback_mark_done(callback: CallbackQuery):
 
 @router.message(Command("becomeadmin"))
 async def cmd_become_admin(message: Message):
-    """Стать администратором по секретному коду"""
     parts = message.text.split()
     if len(parts) < 2:
         await message.answer("❌ Введи код: /becomeadmin КОД")
@@ -367,8 +366,14 @@ async def cmd_become_admin(message: Message):
     ADMIN_SECRET_CODE = "STAROSTA2026"
     
     if code == ADMIN_SECRET_CODE:
-        add_admin(message.from_user.id)
-        await message.answer("✅ Ты теперь староста группы!")
+        student = get_student(message.from_user.id)
+        group_name = student["group_name"] if student else None
+        
+        add_admin(message.from_user.id, group_name)
+        if group_name:
+            await message.answer(f"✅ Ты теперь староста группы {group_name}!")
+        else:
+            await message.answer("✅ Ты теперь староста! (группа не указана)")
     else:
         await message.answer("❌ Неверный код")
 
@@ -395,10 +400,10 @@ async def add_lesson_group(message: Message, state: FSMContext):
     await state.update_data(group_name=group_name)
     
     days_kb = [
-        ["понедельник", "вторник", "среда"],
-        ["четверг", "пятница", "суббота"],
-        ["воскресенье"]
-    ]
+    [KeyboardButton(text="понедельник"), KeyboardButton(text="вторник"), KeyboardButton(text="среда")],
+    [KeyboardButton(text="четверг"), KeyboardButton(text="пятница"), KeyboardButton(text="суббота")],
+    [KeyboardButton(text="воскресенье")]
+]
     kb = ReplyKeyboardMarkup(keyboard=days_kb, resize_keyboard=True)
     
     await message.answer(
@@ -422,8 +427,8 @@ async def add_lesson_day(message: Message, state: FSMContext):
     
     await state.update_data(day=day)
     
-    numbers_kb = [[str(i)] for i in range(1, 7)]
-    numbers_kb.append(["◀️ Отмена"])
+    numbers_kb = [[KeyboardButton(text=str(i))] for i in range(1, 7)]
+    numbers_kb.append([KeyboardButton(text="◀️ Отмена")])
     kb = ReplyKeyboardMarkup(keyboard=numbers_kb, resize_keyboard=True)
     
     await message.answer(

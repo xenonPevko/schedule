@@ -75,7 +75,8 @@ def init_db():
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS admins (
                 admin_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                telegram_id INTEGER UNIQUE
+                telegram_id INTEGER UNIQUE,
+                group_name TEXT
             )
         ''')
         
@@ -161,18 +162,26 @@ def mark_homework_done(hw_id):
         cursor.execute('UPDATE homework SET is_done = 1 WHERE id = ?', (hw_id,))
         conn.commit()
 
-def is_admin(telegram_id):
-    """Проверяет, является ли пользователь администратором"""
+def is_admin(telegram_id, group_name=None):
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM admins WHERE telegram_id = ?', (telegram_id,))
+        if group_name:
+            cursor.execute('''
+                SELECT * FROM admins 
+                WHERE telegram_id = ? AND (group_name = ? OR group_name IS NULL)
+            ''', (telegram_id, group_name))
+        else:
+            cursor.execute('SELECT * FROM admins WHERE telegram_id = ?', (telegram_id,))
         return cursor.fetchone() is not None
 
-def add_admin(telegram_id):
-    """Добавляет администратора"""
+def add_admin(telegram_id, group_name=None):
+    """Добавляет администратора с привязкой к группе"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute('INSERT OR IGNORE INTO admins (telegram_id) VALUES (?)', (telegram_id,))
+        cursor.execute('''
+            INSERT OR REPLACE INTO admins (telegram_id, group_name) 
+            VALUES (?, ?)
+        ''', (telegram_id, group_name))
         conn.commit()
 
 def add_lesson(group_name, day_of_week, lesson_number, subject, room):
