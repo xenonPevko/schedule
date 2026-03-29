@@ -137,22 +137,16 @@ def add_homework(user_id, subject, task_text, due_date):
         conn.commit()
         return cursor.lastrowid
 
-def get_homework(user_id, due_date=None):
+def get_homework(user_id, show_all=False):
     """Получает домашние задания студента"""
     with get_db_connection() as conn:
         cursor = conn.cursor()
-        if due_date:
-            cursor.execute('''
-                SELECT * FROM homework 
-                WHERE user_id = ? AND due_date = ?
-                ORDER BY due_date
-            ''', (user_id, due_date))
+        if show_all:
+            # Показываем все задания (для истории, если понадобится)
+            cursor.execute('SELECT * FROM homework WHERE user_id = ? ORDER BY due_date', (user_id,))
         else:
-            cursor.execute('''
-                SELECT * FROM homework 
-                WHERE user_id = ? 
-                ORDER BY due_date
-            ''', (user_id,))
+            # Показываем только невыполненные
+            cursor.execute('SELECT * FROM homework WHERE user_id = ? AND is_done = 0 ORDER BY due_date', (user_id,))
         return cursor.fetchall()
 
 def mark_homework_done(hw_id):

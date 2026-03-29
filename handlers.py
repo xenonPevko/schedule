@@ -134,7 +134,7 @@ async def cmd_homework(message: Message):
         await message.answer("Сначала напиши /start для регистрации")
         return
     
-    homework_list = get_homework(student["user_id"])
+    homework_list = get_homework(student["user_id"], show_all=False)
     
     if not homework_list:
         await message.answer("📚 У тебя пока нет домашних заданий.\n\nДобавь первое через /addhw!")
@@ -238,6 +238,26 @@ async def add_hw_date(message: Message, state: FSMContext):
     
     await state.clear()
 
+@router.message(Command("history"))
+async def cmd_history(message: Message):
+    """Показать ВСЕ задания (включая выполненные)"""
+    student = get_student(message.from_user.id)
+    if not student:
+        await message.answer("Сначала напиши /start")
+        return
+    
+    homework_list = get_homework(student["user_id"], show_all=True)
+    
+    if not homework_list:
+        await message.answer("📭 История пуста")
+        return
+    
+    text = "📚 **История всех заданий**\n\n"
+    for hw in homework_list:
+        status = "✅" if hw["is_done"] else "⏳"
+        text += f"{status} {hw['subject']}\n📝 {hw['task_text']}\n📅 {hw['due_date']}\n\n"
+    
+    await message.answer(text, parse_mode="Markdown")
 
 @router.message(Command("setgroup"))
 async def cmd_set_group(message: Message):
