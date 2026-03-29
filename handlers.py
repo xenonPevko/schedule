@@ -205,7 +205,7 @@ async def add_hw_date(message: Message, state: FSMContext):
     
     # Проверка формата даты и запрет на прошедшую дату
     try:
-        due_date_obj = datetime.strptime(due_date, "%d.%m.%Y")
+        due_date_obj = datetime.strptime(due_date, "%d.%m.%Y").date()
         today = get_izhevsk_now().date()
         
         if due_date_obj < today:
