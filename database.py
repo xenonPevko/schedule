@@ -80,7 +80,7 @@ def init_db():
             )
         ''')
         
-        # Добавляем время пар по умолчанию (можно заменить под своё расписание)
+        # Добавляем время пар по умолчанию 
         cursor.execute('''
             INSERT OR IGNORE INTO lesson_times (lesson_number, start_time, end_time)
             VALUES 
@@ -233,6 +233,12 @@ def get_lessons_by_group(group_name):
         ''', (group_name,))
         return cursor.fetchall()
     
+def get_lesson_by_id(lesson_id):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM schedule WHERE id = ?', (lesson_id,))
+        return cursor.fetchone()
+
 def get_homework_by_date(user_id, due_date):
     """Получает домашние задания на конкретную дату"""
     with get_db_connection() as conn:

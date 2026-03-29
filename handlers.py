@@ -7,9 +7,10 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 from database import (
-    get_db_connection, add_student, get_student, get_schedule,
+    add_student, get_student, get_schedule, 
     add_homework, get_homework, get_homework_by_date, mark_homework_done,
-    is_admin, add_admin, add_lesson, get_all_groups, get_lessons_by_group, delete_lesson
+    is_admin, add_admin, add_lesson, get_all_groups, get_lessons_by_group, delete_lesson,
+    get_lesson_by_id
 )
 from keyboards import get_main_keyboard, get_homework_inline_keyboard, get_groups_keyboard
 from bot import get_izhevsk_now
@@ -369,18 +370,36 @@ async def cmd_become_admin(message: Message):
 
 @router.message(Command("addlesson"))
 async def cmd_add_lesson_start(message: Message, state: FSMContext):
-    print("DEBUG: ВЫЗВАНА ФУНКЦИЯ cmd_add_lesson_start") 
-    """Начать добавление занятия (только для админов)"""
     if not is_admin(message.from_user.id):
         await message.answer("⛔ Эта команда доступна только старосте группы.")
         return
     
+    # Получаем группу старосты
+    student = get_student(message.from_user.id)
+    if not student or not student["group_name"]:
+        await message.answer("⚠️ Сначала выбери свою группу через /start")
+        return
+    
+    group_name = student["group_name"]
+    await state.update_data(group_name=group_name)
+    
+    # Сразу переходим к выбору дня недели
+    from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
+    
+    days_kb = [
+        [KeyboardButton(text="понедельник"), KeyboardButton(text="вторник"), KeyboardButton(text="среда")],
+        [KeyboardButton(text="четверг"), KeyboardButton(text="пятница"), KeyboardButton(text="суббота")],
+        [KeyboardButton(text="воскресенье"), KeyboardButton(text="◀️ Отмена")]
+    ]
+    kb = ReplyKeyboardMarkup(keyboard=days_kb, resize_keyboard=True)
+    
     await message.answer(
-        "📚 **Добавление занятия в расписание**\n\n"
-        "Введи название группы (например: ПИ-д, ПИ-э, ИВТ и т.д.)",
+        f"📚 **Добавление занятия для группы {group_name}**\n\n"
+        "Выбери **день недели**:",
+        reply_markup=kb,
         parse_mode="Markdown"
     )
-    await state.set_state(AddLessonStates.waiting_for_group)
+    await state.set_state(AddLessonStates.waiting_for_day)
 
 
 @router.message(AddLessonStates.waiting_for_group)
@@ -417,7 +436,7 @@ async def add_lesson_day(message: Message, state: FSMContext):
     
     await state.update_data(day=day)
     
-    numbers_kb = [[KeyboardButton(text=str(i))] for i in range(1, 7)]
+    numbers_kb = [[KeyboardButton(text=str(i))] for i in range(1, 8)]  
     numbers_kb.append([KeyboardButton(text="◀️ Отмена")])
     kb = ReplyKeyboardMarkup(keyboard=numbers_kb, resize_keyboard=True)
     
@@ -527,7 +546,6 @@ async def cmd_view_schedule(message: Message):
 
 @router.message(lambda msg: msg.text and msg.text.startswith("/del_"))
 async def cmd_delete_lesson(message: Message):
-    """Удаление занятия по ID (только для админов)"""
     if not is_admin(message.from_user.id):
         await message.answer("⛔ Эта команда доступна только старосте группы.")
         return
@@ -538,9 +556,51 @@ async def cmd_delete_lesson(message: Message):
         await message.answer("❌ Неверный формат. Используй команду из списка.")
         return
     
+    # Получаем группу старосты
+    student = get_student(message.from_user.id)
+    if not student or not student["group_name"]:
+        await message.answer("⚠️ Сначала выбери свою группу.")
+        return
+    
+    # Проверяем, что занятие принадлежит группе старосты
+    lesson = get_lesson_by_id(lesson_id)
+    if not lesson or lesson["group_name"] != student["group_name"]:
+        await message.answer("❌ Занятие не найдено или принадлежит другой группе.")
+        return
+    
     deleted = delete_lesson(lesson_id)
     
     if deleted:
         await message.answer(f"✅ Занятие с ID {lesson_id} удалено.")
     else:
         await message.answer(f"❌ Занятие с ID {lesson_id} не найдено.")
+
+@router.message(Command("del"))
+async def cmd_delete_lesson_list(message: Message):
+    """Показывает список занятий для удаления"""
+    if not is_admin(message.from_user.id):
+        await message.answer("⛔ Эта команда доступна только старосте группы.")
+        return
+    
+    student = get_student(message.from_user.id)
+    if not student or not student["group_name"]:
+        await message.answer("⚠️ Сначала выбери свою группу.")
+        return
+    
+    group_name = student["group_name"]
+    lessons = get_lessons_by_group(group_name)
+    
+    if not lessons:
+        await message.answer(f"📭 Для группы {group_name} расписание пустое.")
+        return
+    
+    text = f"📚 **Расписание группы {group_name}**\n\n"
+    current_day = ""
+    for lesson in lessons:
+        if lesson["day_of_week"] != current_day:
+            current_day = lesson["day_of_week"]
+            text += f"\n*{current_day.capitalize()}:*\n"
+        text += f"{lesson['lesson_number']} пара ({lesson['start_time']}-{lesson['end_time']}) — {lesson['subject']} (ауд. {lesson['room']})\n"
+        text += f"➡️ Для удаления: `/del_{lesson['id']}`\n"
+    
+    await message.answer(text, parse_mode="Markdown")
