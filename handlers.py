@@ -324,18 +324,7 @@ async def cmd_is_admin(message: Message):
 
 # ==================== ОБРАБОТЧИК ВЫБОРА ГРУППЫ ====================
 
-@router.message(F.text.in_(["ПИ-д", "ПИ-э", "ПИ-ю", "ИВТ", "ИС", "ИТ"]))
-async def select_group(message: Message):
-    """Обработчик нажатия на кнопку группы"""
-    group = message.text
-    user_id = message.from_user.id
-    
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute('UPDATE students SET group_name = ? WHERE telegram_id = ?', (group, user_id))
-        conn.commit()
-    
-    await message.answer(f"✅ Группа {group} сохранена!", reply_markup=get_main_keyboard())
+
 
 
 # ==================== ОБРАБОТЧИК ИНЛАЙН-КНОПОК ====================
