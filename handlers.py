@@ -286,7 +286,7 @@ async def cmd_help(message: Message):
 /setgroup — установить группу
 
 📌 Для старост:
-/become_admin КОД — стать администратором (код: STAROSTA2026)
+/become_admin КОД — стать администратором 
 /add_lesson — добавить занятие в расписание
 /view_schedule — посмотреть расписание группы
 /is_admin — проверить статус администратора
